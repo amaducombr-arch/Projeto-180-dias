@@ -87,10 +87,10 @@ jobs:
         run: ./gradlew --no-daemon clean
 
       - name: Unit tests
-        run: ./gradlew --no-daemon test --stacktrace
+        run: ./gradlew --no-daemon --max-workers=1 test --stacktrace
 
       - name: Android debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon --max-workers=1 assembleDebug
 
       - name: Upload build outputs and generated Wrapper
         if: always()

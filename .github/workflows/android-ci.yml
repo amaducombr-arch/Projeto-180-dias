@@ -1,0 +1,108 @@
+name: Android CI - Projeto 180 Dias
+
+on:
+  push:
+    branches:
+      - etapa-4.1/estrutura-original
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Gradle validation (JDK 17 / SDK 36)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout authorized branch
+        uses: actions/checkout@v4
+
+      - name: Download the original CI Wrapper artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: projeto-180-dias-etapa-4.1-b-4
+          run-id: 44705130213
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          path: wrapper-artifact
+
+      - name: Incorporate the exact Wrapper files into the authorized branch
+        shell: bash
+        run: |
+          test "${GITHUB_REF_NAME}" = "etapa-4.1/estrutura-original"
+          install -D -m 755 wrapper-artifact/gradlew gradlew
+          install -D -m 644 wrapper-artifact/gradlew.bat gradlew.bat
+          install -D -m 644 wrapper-artifact/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.jar
+          install -D -m 644 wrapper-artifact/gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.properties
+          chmod +x gradlew
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
+          if ! git diff --cached --quiet; then
+            git commit -m "build(gradle): incorporate official Gradle 8.13 wrapper"
+            git push origin "HEAD:etapa-4.1/estrutura-original"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK 36 and required build tools
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+
+      - name: Verify toolchain
+        run: |
+          java -version
+          sdkmanager --list_installed
+
+      - name: Verify generated Wrapper
+        run: |
+          test -f gradlew
+          test -f gradlew.bat
+          test -f gradle/wrapper/gradle-wrapper.jar
+          test -f gradle/wrapper/gradle-wrapper.properties
+          chmod +x gradlew
+          ./gradlew --version
+
+      - name: Gradle Sync and project configuration
+        run: ./gradlew --no-daemon help
+
+      - name: Gradle clean
+        run: ./gradlew --no-daemon clean
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon test --stacktrace
+
+      - name: Android debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload build outputs and generated Wrapper
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: projeto-180-dias-etapa-4.1-b-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/tests/
+            app/build/test-results/
+            gradlew
+            gradlew.bat
+            gradle/wrapper/gradle-wrapper.jar
+            gradle/wrapper/gradle-wrapper.properties
